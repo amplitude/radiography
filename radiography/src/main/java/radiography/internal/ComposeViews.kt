@@ -26,7 +26,7 @@ internal const val COMPOSE_UNSUPPORTED_MESSAGE =
     "https://github.com/square/radiography for a new release."
 
 /** Reflectively tries to determine if Compose is on the classpath. */
-internal val isComposeAvailable by lazy(PUBLICATION) {
+public val isComposeAvailable: Boolean by lazy(PUBLICATION) {
   try {
     Class.forName(ANDROID_COMPOSE_VIEW_CLASS_NAME)
     true
