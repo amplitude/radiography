@@ -16,10 +16,32 @@ import androidx.compose.ui.tooling.data.Group
 import androidx.compose.ui.tooling.data.NodeGroup
 import androidx.compose.ui.tooling.data.UiToolingDataApi
 import androidx.compose.ui.tooling.data.asTree
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import radiography.internal.ComposeLayoutInfo.AndroidViewInfo
 import radiography.internal.ComposeLayoutInfo.LayoutNodeInfo
 import radiography.internal.ComposeLayoutInfo.SubcompositionInfo
+
+public data class SourceLocation(
+  val lineNumber: Int,
+  val offset: Int,
+  val length: Int,
+  val sourceFile: String?,
+  val packageHash: Int
+) {
+  public companion object {
+    @OptIn(UiToolingDataApi::class)
+    public fun from(location: androidx.compose.ui.tooling.data.SourceLocation?): SourceLocation? {
+      return if (location == null) null else SourceLocation(
+        lineNumber = location.lineNumber,
+        offset = location.offset,
+        length = location.length,
+        sourceFile = location.sourceFile,
+        packageHash = location.packageHash
+      )
+    }
+  }
+}
 
 /**
  * Information about a Compose `LayoutNode`, extracted from a [Group] tree via [Group.computeLayoutInfos].
@@ -33,17 +55,22 @@ import radiography.internal.ComposeLayoutInfo.SubcompositionInfo
  */
 internal sealed class ComposeLayoutInfo {
   data class LayoutNodeInfo(
-      val name: String,
-      val bounds: IntRect,
-      val modifiers: List<Modifier>,
-      val children: Sequence<ComposeLayoutInfo>,
-      val semanticsNodes: List<SemanticsNode>,
+    val name: String,
+    val bounds: IntRect,
+    val modifiers: List<Modifier>,
+    val children: Sequence<ComposeLayoutInfo>,
+    val semanticsNodes: List<SemanticsNode>,
+    val density: Density?,
+    val location: SourceLocation?,
+    val layoutNode: Any?,
   ) : ComposeLayoutInfo()
 
   data class SubcompositionInfo(
     val name: String,
     val bounds: IntRect,
-    val children: Sequence<ComposeLayoutInfo>
+    val children: Sequence<ComposeLayoutInfo>,
+    val density: Density?,
+    val location: SourceLocation?,
   ) : ComposeLayoutInfo()
 
   data class AndroidViewInfo(
@@ -95,7 +122,8 @@ internal fun Group.computeLayoutInfos(
     // This node will "consume" the name, so reset it name to empty for children.
     .flatMap { it.computeLayoutInfos(semanticsOwner = semanticsOwner) }
 
-  val semanticsId = (this.node as? LayoutInfo)?.semanticsId
+  val nodeLayoutInfo = (this.node as? LayoutInfo)
+  val semanticsId = nodeLayoutInfo?.semanticsId
   val semanticsNodes = semanticsOwner?.getAllSemanticsNodes(mergingEnabled = false)
     ?.filter { it.id == semanticsId }
     ?: emptyList()
@@ -106,6 +134,11 @@ internal fun Group.computeLayoutInfos(
     modifiers = modifierInfo.map { it.modifier },
     semanticsNodes = semanticsNodes,
     children = children + irregularChildren,
+    location = SourceLocation.from(location),
+    density = nodeLayoutInfo?.density,
+    // Warning, seems risky to keep a ref to the layoutNode
+    // should make sure to clear this after use to prevent memory leaks.
+    layoutNode = this.node,
   )
   return sequenceOf(layoutInfo)
 }
@@ -123,7 +156,10 @@ private fun Group.subComposedChildren(name: String, semanticsOwner: SemanticsOwn
       SubcompositionInfo(
         name = name,
         bounds = box,
-        children = subcomposer.compositionData.asTree().computeLayoutInfos(semanticsOwner = semanticsOwner)
+        children = subcomposer.compositionData.asTree()
+          .computeLayoutInfos(semanticsOwner = semanticsOwner),
+        density = if (this is NodeGroup) (this.node as? LayoutInfo)?.density else null,
+        location = SourceLocation.from(location),
       )
     }
 

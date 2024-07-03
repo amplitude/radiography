@@ -6,12 +6,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsConfiguration
 import androidx.compose.ui.semantics.SemanticsModifier
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntRect
 import radiography.ScannableView.AndroidView
 import radiography.ScannableView.ComposeView
 import radiography.internal.ComposeLayoutInfo
 import radiography.internal.ComposeLayoutInfo.AndroidViewInfo
 import radiography.internal.ComposeLayoutInfo.LayoutNodeInfo
 import radiography.internal.ComposeLayoutInfo.SubcompositionInfo
+import radiography.internal.SourceLocation
 import radiography.internal.getComposeScannableViews
 import radiography.internal.mightBeComposeView
 
@@ -49,6 +52,10 @@ public sealed class ScannableView {
     public val modifiers: List<Modifier>,
     public val semanticsNodes: List<SemanticsNode>,
     override val children: Sequence<ScannableView>,
+    public val bounds: IntRect,
+    public val density: Density?,
+    public val location: SourceLocation?,
+    public val layoutNode: Any? = null,
   ) : ScannableView() {
     override fun toString(): String = "${ComposeView::class.java.simpleName}($displayName)"
 
@@ -105,7 +112,11 @@ internal fun ComposeLayoutInfo.toScannableView(): ScannableView = when (val layo
     height = layoutInfo.bounds.run { bottom - top },
     modifiers = layoutInfo.modifiers,
     semanticsNodes = layoutInfo.semanticsNodes,
-    children = layoutInfo.children.map(ComposeLayoutInfo::toScannableView)
+    children = layoutInfo.children.map(ComposeLayoutInfo::toScannableView),
+    bounds = layoutInfo.bounds.copy(),
+    density = layoutInfo.density,
+    location = layoutInfo.location,
+    layoutNode = layoutInfo.layoutNode,
   )
 
   is SubcompositionInfo -> ComposeView(
@@ -115,6 +126,10 @@ internal fun ComposeLayoutInfo.toScannableView(): ScannableView = when (val layo
     modifiers = emptyList(),
     semanticsNodes = emptyList(),
     children = layoutInfo.children.map(ComposeLayoutInfo::toScannableView),
+    bounds = layoutInfo.bounds.copy(),
+    density = layoutInfo.density,
+    location = layoutInfo.location,
+    layoutNode = null,
   )
 
   is AndroidViewInfo -> AndroidView(layoutInfo.view)
